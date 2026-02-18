@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<title>Maze Stalker</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:#000;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;font-family:monospace;}
+#info{color:#aaa;font-size:12px;margin-bottom:6px;text-align:center;}
+</style>
+</head>
+<body>
+<div id="info">WASD = Move &nbsp;|&nbsp; SHIFT = Run (makes noise) &nbsp;|&nbsp; Avoid the Stalker</div>
+<div id="game"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/phaser/3.60.0/phaser.min.js"></script>
+<script>
+// ─────────────────────────────────────────────
+//  EasyStar.js (embedded minimal build)
+// ─────────────────────────────────────────────
+var EasyStar=function(){var t={};t.js=function(){var STRAIGHT_COST=1,DIAGONAL_COST=1.4,MAX_ITERATIONS=1e4;function EasyStar(){this.acceptableTiles=[];this.collisionGrid=[];this.costMap={};this.pointsToCost={};this.directionalConditions={};this.allowCornerCutting=true;this.iterationsPerCalculation=MAX_ITERATIONS;this.diagonalsEnabled=false;this.instances=[];this.instanceQueue=[];this.syncEnabled=false;}EasyStar.prototype.setGrid=function(g){this.collisionGrid=g;};EasyStar.prototype.setAcceptableTiles=function(a){this.acceptableTiles=a;};EasyStar.prototype.enableDiagonals=function(){this.diagonalsEnabled=true;};EasyStar.prototype.disableDiagonals=function(){this.diagonalsEnabled=false;};EasyStar.prototype.setIterationsPerCalculation=function(n){this.iterationsPerCalculation=n;};EasyStar.prototype.findPath=function(sx,sy,ex,ey,cb){var inst={openList:[],closedList:{},isDoneCalculating:false,nodeHash:{},startX:sx,startY:sy,endX:ex,endY:ey,callback:cb};var sNode=this._getNode(inst,sx,sy);sNode.g=0;sNode.f=0;inst.openList.push(sNode);this.instances.push(inst);if(this.syncEnabled)this._calculate();};EasyStar.prototype.calculate=function(){if(this.instanceQueue.length===0&&this.instances.length===0)return;if(this.syncEnabled)return;this._calculate();};EasyStar.prototype._calculate=function(){for(var i=0;i<this.instances.length;i++){var inst=this.instances[i];var iter=0;while(iter<this.iterationsPerCalculation&&!inst.isDoneCalculating){iter++;if(inst.openList.length===0){inst.isDoneCalculating=true;inst.callback(null);break;}inst.openList.sort(function(a,b){return a.f-b.f;});var cur=inst.openList.shift();if(cur.x===inst.endX&&cur.y===inst.endY){var path=[];var node=cur;while(node){path.unshift({x:node.x,y:node.y});node=node.parent;}inst.isDoneCalculating=true;inst.callback(path);break;}inst.closedList[cur.y+'_'+cur.x]=true;var neighbors=this._getNeighbors(inst,cur);for(var n=0;n<neighbors.length;n++){var nb=neighbors[n];if(inst.closedList[nb.y+'_'+nb.x])continue;var inOpen=inst.openList.indexOf(nb)!==-1;var g=cur.g+(nb.x!==cur.x&&nb.y!==cur.y?DIAGONAL_COST:STRAIGHT_COST);if(!inOpen||g<nb.g){nb.g=g;nb.f=g+this._heuristic(nb,inst);nb.parent=cur;if(!inOpen)inst.openList.push(nb);}}}if(inst.isDoneCalculating){this.instances.splice(i,1);i--;}}};EasyStar.prototype._heuristic=function(node,inst){return Math.abs(node.x-inst.endX)+Math.abs(node.y-inst.endY);};EasyStar.prototype._getNode=function(inst,x,y){var key=y+'_'+x;if(!inst.nodeHash[key])inst.nodeHash[key]={x:x,y:y,g:0,f:0,parent:null};return inst.nodeHash[key];};EasyStar.prototype._getNeighbors=function(inst,node){var res=[];var x=node.x,y=node.y;var dirs=[[0,1],[0,-1],[1,0],[-1,0]];if(this.diagonalsEnabled)dirs=dirs.concat([[1,1],[1,-1],[-1,1],[-1,-1]]);for(var i=0;i<dirs.length;i++){var nx=x+dirs[i][0],ny=y+dirs[i][1];if(ny<0||ny>=this.collisionGrid.length||nx<0||nx>=this.collisionGrid[0].length)continue;var tile=this.collisionGrid[ny][nx];var ok=false;for(var j=0;j<this.acceptableTiles.length;j++)if(this.acceptableTiles[j]===tile){ok=true;break;}if(ok)res.push(this._getNode(inst,nx,ny));}return res;};return EasyStar;}();return t;}();
+
+// ─────────────────────────────────────────────
+//  CONSTANTS
+// ─────────────────────────────────────────────
+const TILE=32, COLS=20, ROWS=20;
+const W=COLS*TILE, H=ROWS*TILE;
+
+// 20x20 maze (1=wall, 0=floor)
+const MAP=[
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+  [1,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,1],
+  [1,0,1,0,1,0,1,1,1,0,1,0,1,1,1,0,1,0,1,1],
+  [1,0,1,0,0,0,1,0,0,0,0,0,0,0,1,0,0,0,1,1],
+  [1,0,1,1,1,1,1,0,1,1,1,1,1,0,1,1,1,0,1,1],
+  [1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,0,0,1],
+  [1,1,1,0,1,1,1,1,1,0,1,1,1,1,1,1,1,1,0,1],
+  [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0,0,1],
+  [1,0,1,1,1,1,1,0,1,1,1,0,1,1,1,0,1,0,1,1],
+  [1,0,0,0,0,0,1,0,1,0,0,0,0,0,1,0,0,0,1,1],
+  [1,1,1,1,1,0,1,0,1,0,1,1,1,0,1,0,1,1,1,1],
+  [1,0,0,0,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,1],
+  [1,0,1,1,1,1,1,1,1,0,1,0,1,0,1,1,1,1,0,1],
+  [1,0,1,0,0,0,0,0,0,0,1,0,0,0,0,0,0,1,0,1],
+  [1,0,1,0,1,1,1,1,1,0,1,1,1,1,1,1,0,1,0,1],
+  [1,0,0,0,1,0,0,0,1,0,0,0,0,0,0,0,0,0,0,1],
+  [1,1,1,0,1,0,1,0,1,1,1,1,1,0,1,1,1,1,0,1],
+  [1,0,0,0,0,0,1,0,0,0,0,0,1,0,1,0,0,0,0,1],
+  [1,0,1,1,1,1,1,1,1,0,1,0,0,0,0,0,1,1,0,1],
+  [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+];
+
+// ─────────────────────────────────────────────
+//  PLAYER
+// ─────────────────────────────────────────────
+class Player {
+  constructor(scene) {
+    this.scene = scene;
+    this.sprite = scene.add.rectangle(1.5*TILE, 1.5*TILE, TILE-4, TILE-4, 0x00ccff);
+    scene.physics.add.existing(this.sprite);
+    this.sprite.body.setCollideWorldBounds(true);
+    this.keys = scene.input.keyboard.addKeys({
+      up: Phaser.Input.Keyboard.KeyCodes.W,
+      down: Phaser.Input.Keyboard.KeyCodes.S,
+      left: Phaser.Input.Keyboard.KeyCodes.A,
+      right: Phaser.Input.Keyboard.KeyCodes.D,
+      shift: Phaser.Input.Keyboard.KeyCodes.SHIFT
+    });
+    this.noiseTimer = 0;
+    this.label = scene.add.text(0,0,'YOU',{fontSize:'8px',fill:'#00ccff'}).setDepth(10);
+    this.caught = false;
+  }
+  update(delta) {
+    if(this.caught) { this.sprite.body.setVelocity(0,0); return; }
+    const running = this.keys.shift.isDown;
+    const spd = running ? 160 : 90;
+    let vx=0,vy=0;
+    if(this.keys.left.isDown) vx=-spd;
+    else if(this.keys.right.isDown) vx=spd;
+    if(this.keys.up.isDown) vy=-spd;
+    else if(this.keys.down.isDown) vy=spd;
+    this.sprite.body.setVelocity(vx,vy);
+    // noise emit
+    if(running&&(vx!==0||vy!==0)){
+      this.noiseTimer-=delta;
+      if(this.noiseTimer<=0){
+        this.noiseTimer=200;
+        this.scene.events.emit('noise',{x:this.sprite.x,y:this.sprite.y});
+      }
+    }
+    this.label.setPosition(this.sprite.x-10, this.sprite.y-20);
+  }
+  get x(){ return this.sprite.x; }
+  get y(){ return this.sprite.y; }
+}
+
+// ─────────────────────────────────────────────
+//  ENEMY
+// ─────────────────────────────────────────────
+const STATE={PATROL:'PATROL',CHASE:'CHASE',INVESTIGATE:'INVESTIGATE',SEARCH:'SEARCH'};
+const STATE_COLOR={PATROL:0x00ff00,CHASE:0xff0000,INVESTIGATE:0xff8800,SEARCH:0xffff00};
+
+class Enemy {
+  constructor(scene, easystar) {
+    this.scene = scene;
+    this.es = easystar;
+    this.sprite = scene.add.rectangle(18.5*TILE, 18.5*TILE, TILE-4, TILE-4, 0xff4444);
+    scene.physics.add.existing(this.sprite);
+    this.sprite.body.setCollideWorldBounds(true);
+    this.state = STATE.PATROL;
+    this.path = [];
+    this.pathTarget = null;
+    this.lastKnownPos = null;
+    this.noiseTarget = null;
+    this.stateTimer = 0;
+    this.searchTimer = 0;
+    this.speed = 70;
+    this.pathGraphics = scene.add.graphics().setDepth(5);
+    this.visionGraphics = scene.add.graphics().setDepth(6);
+    this.stateLabel = scene.add.text(0,0,'',{fontSize:'9px',fill:'#fff',backgroundColor:'#000'}).setDepth(12);
+    this.VISION_RANGE = 160;
+    this.VISION_ANGLE = 70; // degrees half-angle
+    this.facing = 0; // radians
+    // listen for noise
+    scene.events.on('noise', (pos)=>{
+      const d=Phaser.Math.Distance.Between(this.sprite.x,this.sprite.y,pos.x,pos.y);
+      if(d<350 && this.state!==STATE.CHASE){
+        this.noiseTarget={x:pos.x,y:pos.y};
+        this._setState(STATE.INVESTIGATE);
+      }
+    });
+  }
+
+  _setState(s){
+    this.state=s;
+    this.path=[];
+    this.pathTarget=null;
+    this.stateTimer=0;
+  }
+
+  _tileOf(wx,wy){ return {tx:Math.floor(wx/TILE),ty:Math.floor(wy/TILE)}; }
+  _centerOf(tx,ty){ return {x:tx*TILE+TILE/2, y:ty*TILE+TILE/2}; }
+  _isFloor(tx,ty){
+    if(ty<0||ty>=ROWS||tx<0||tx>=COLS)return false;
+    return MAP[ty][tx]===0;
+  }
+
+  _findPath(tx,ty,cb){
+    const {tx:sx,ty:sy}=this._tileOf(this.sprite.x,this.sprite.y);
+    if(sx===tx&&sy===ty){cb([]);return;}
+    this.es.findPath(sx,sy,tx,ty,(path)=>cb(path||[]));
+    this.es.calculate();
+  }
+
+  _randomFloor(){
+    let tx,ty;
+    do{ tx=Phaser.Math.Between(1,COLS-2); ty=Phaser.Math.Between(1,ROWS-2); }
+    while(!this._isFloor(tx,ty));
+    return{tx,ty};
+  }
+
+  _canSeePlayer(player){
+    const ex=this.sprite.x, ey=this.sprite.y;
+    const px=player.x, py=player.y;
+    const dist=Phaser.Math.Distance.Between(ex,ey,px,py);
+    if(dist>this.VISION_RANGE) return false;
+    const angleToPlayer=Phaser.Math.Angle.Between(ex,ey,px,py);
+    const diff=Phaser.Math.Angle.Wrap(angleToPlayer-this.facing);
+    if(Math.abs(diff)>Phaser.Math.DegToRad(this.VISION_ANGLE)) return false;
+    // ray march for wall check
+    const steps=Math.ceil(dist/8);
+    for(let i=1;i<steps;i++){
+      const t=i/steps;
+      const rx=ex+(px-ex)*t, ry=ey+(py-ey)*t;
+      const {tx,ty}=this._tileOf(rx,ry);
+      if(!this._isFloor(tx,ty)) return false;
+    }
+    return true;
+  }
+
+  _drawVision(seeingPlayer){
+    const g=this.visionGraphics;
+    g.clear();
+    const color=seeingPlayer?0xff0000:0xffff00;
+    g.lineStyle(1,color,0.5);
+    g.fillStyle(color,0.12);
+    const r=this.VISION_RANGE;
+    const a1=this.facing-Phaser.Math.DegToRad(this.VISION_ANGLE);
+    const a2=this.facing+Phaser.Math.DegToRad(this.VISION_ANGLE);
+    g.beginPath();
+    g.moveTo(this.sprite.x,this.sprite.y);
+    const steps=16;
+    for(let i=0;i<=steps;i++){
+      const a=a1+(a2-a1)*(i/steps);
+      g.lineTo(this.sprite.x+Math.cos(a)*r, this.sprite.y+Math.sin(a)*r);
+    }
+    g.closePath();
+    g.fillPath();
+    g.strokePath();
+  }
+
+  _drawPath(){
+    const g=this.pathGraphics;
+    g.clear();
+    if(this.path.length<2) return;
+    g.lineStyle(2,0xff0000,0.7);
+    g.beginPath();
+    g.moveTo(this.sprite.x,this.sprite.y);
+    for(const p of this.path){
+      const c=this._centerOf(p.x,p.y);
+      g.lineTo(c.x,c.y);
+    }
+    g.strokePath();
+  }
+
+  update(delta, player){
+    this.stateTimer+=delta;
+    const ex=this.sprite.x, ey=this.sprite.y;
+
+    // Update facing when moving
+    const vx=this.sprite.body.velocity.x, vy=this.sprite.body.velocity.y;
+    if(Math.abs(vx)>5||Math.abs(vy)>5) this.facing=Math.atan2(vy,vx);
+
+    const seeing=this._canSeePlayer(player);
+    if(seeing){
+      this.lastKnownPos={x:player.x,y:player.y};
+      if(this.state!==STATE.CHASE) this._setState(STATE.CHASE);
+    }
+
+    // ── FSM ──
+    switch(this.state){
+      case STATE.PATROL:{
+        this.speed=60;
+        if(!this.pathTarget||this.path.length===0){
+          const {tx,ty}=this._randomFloor();
+          this.pathTarget={tx,ty};
+          this._findPath(tx,ty,(p)=>{ this.path=p; });
+        }
+        break;
+      }
+      case STATE.CHASE:{
+        this.speed=110;
+        if(!seeing){
+          // lost sight
+          this._setState(STATE.SEARCH);
+          this.searchTimer=3000;
+        } else {
+          // re-path every ~600ms
+          if(this.stateTimer%600<delta){
+            const {tx,ty}=this._tileOf(player.x,player.y);
+            this._findPath(tx,ty,(p)=>{ this.path=p; });
+          }
+        }
+        break;
+      }
+      case STATE.INVESTIGATE:{
+        this.speed=85;
+        if(!this.pathTarget&&this.noiseTarget){
+          const {tx,ty}=this._tileOf(this.noiseTarget.x,this.noiseTarget.y);
+          this.pathTarget={tx,ty};
+          this._findPath(tx,ty,(p)=>{ this.path=p; });
+        }
+        if(this.path.length===0&&this.pathTarget){
+          this._setState(STATE.PATROL);
+        }
+        break;
+      }
+      case STATE.SEARCH:{
+        this.speed=75;
+        this.searchTimer-=delta;
+        if(!this.pathTarget&&this.lastKnownPos){
+          const {tx,ty}=this._tileOf(this.lastKnownPos.x,this.lastKnownPos.y);
+          this.pathTarget={tx,ty};
+          this._findPath(tx,ty,(p)=>{ this.path=p; });
+        }
+        if(this.searchTimer<=0||(this.path.length===0&&this.pathTarget)){
+          this._setState(STATE.PATROL);
+        }
+        break;
+      }
+    }
+
+    // ── Follow path ──
+    if(this.path.length>0){
+      const next=this.path[0];
+      const c=this._centerOf(next.x,next.y);
+      const d=Phaser.Math.Distance.Between(ex,ey,c.x,c.y);
+      if(d<6){ this.path.shift(); this.sprite.body.setVelocity(0,0); }
+      else {
+        const angle=Math.atan2(c.y-ey,c.x-ex);
+        this.sprite.body.setVelocity(Math.cos(angle)*this.speed, Math.sin(angle)*this.speed);
+      }
+    } else {
+      this.sprite.body.setVelocity(0,0);
+    }
+
+    // ── Tint by state ──
+    this.sprite.setFillStyle(STATE_COLOR[this.state]);
+
+    // ── Debug visuals ──
+    this._drawVision(seeing);
+    this._drawPath();
+    this.stateLabel.setText(`STATE: ${this.state}`);
+    this.stateLabel.setPosition(ex-40, ey-28);
+
+    // ── Catch player ──
+    const catchDist=Phaser.Math.Distance.Between(ex,ey,player.x,player.y);
+    if(catchDist<TILE*0.6&&!player.caught){
+      player.caught=true;
+      this.scene.events.emit('caught');
+    }
+  }
+}
+
+// ─────────────────────────────────────────────
+//  MAIN SCENE
+// ─────────────────────────────────────────────
+class MainScene extends Phaser.Scene {
+  constructor(){ super('MainScene'); }
+
+  create(){
+    // Build tilemap
+    this.wallGroup = this.physics.add.staticGroup();
+    for(let r=0;r<ROWS;r++){
+      for(let c=0;c<COLS;c++){
+        const x=c*TILE+TILE/2, y=r*TILE+TILE/2;
+        if(MAP[r][c]===1){
+          const wall=this.add.rectangle(x,y,TILE,TILE,0x2244aa);
+          this.physics.add.existing(wall,true);
+          this.wallGroup.add(wall);
+        } else {
+          this.add.rectangle(x,y,TILE,TILE,0x222233);
+        }
+      }
+    }
+
+    // Grid lines
+    const gl=this.add.graphics().setAlpha(0.15);
+    gl.lineStyle(1,0xffffff);
+    for(let r=0;r<=ROWS;r++){gl.beginPath();gl.moveTo(0,r*TILE);gl.lineTo(W,r*TILE);gl.strokePath();}
+    for(let c=0;c<=COLS;c++){gl.beginPath();gl.moveTo(c*TILE,0);gl.lineTo(c*TILE,H);gl.strokePath();}
+
+    // EasyStar
+    this.es=new EasyStar.js();
+    this.es.setGrid(MAP);
+    this.es.setAcceptableTiles([0]);
+    this.es.setIterationsPerCalculation(500);
+
+    // Player & Enemy
+    this.player=new Player(this);
+    this.enemy=new Enemy(this,this.es);
+
+    // Collisions
+    this.physics.add.collider(this.player.sprite,this.wallGroup);
+    this.physics.add.collider(this.enemy.sprite,this.wallGroup);
+
+    // HUD
+    this.hud=this.add.text(4,4,'MAZE STALKER',{fontSize:'11px',fill:'#fff'}).setDepth(20);
+    this.legend=this.add.text(W-120,4,
+      '🟢 PATROL\n🔴 CHASE\n🟠 INVESTIGATE\n🟡 SEARCH',
+      {fontSize:'9px',fill:'#fff',lineSpacing:3}).setDepth(20);
+
+    // Caught overlay
+    this.events.on('caught',()=>{
+      this.add.rectangle(W/2,H/2,W,H,0xff0000,0.45).setDepth(30);
+      this.add.text(W/2,H/2,'CAUGHT!\nPress F5 to restart',
+        {fontSize:'28px',fill:'#fff',align:'center'}).setOrigin(0.5).setDepth(31);
+    });
+
+    this.cameras.main.setBackgroundColor('#111122');
+  }
+
+  update(_,delta){
+    this.player.update(delta);
+    this.enemy.update(delta,this.player);
+  }
+}
+
+// ─────────────────────────────────────────────
+//  BOOT
+// ─────────────────────────────────────────────
+new Phaser.Game({
+  type: Phaser.AUTO,
+  width: W,
+  height: H,
+  parent: 'game',
+  backgroundColor: '#111122',
+  physics:{ default:'arcade', arcade:{gravity:{y:0},debug:false} },
+  scene: MainScene
+});
+</script>
+</body>
+</html>
